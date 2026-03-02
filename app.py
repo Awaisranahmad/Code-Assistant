@@ -7,149 +7,205 @@ import plotly.graph_objects as go
 import numpy as np
 import re
 import textstat
-from pptx import Presentation
-import io
+import json
+import xml.etree.ElementTree as ET
 
-# --- 1. Connection ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.set_page_config(page_title="AI Sentinel Ultra", page_icon="🛡️", layout="wide")
+st.set_page_config(
+    page_title="Universal AI Detector",
+    page_icon="🛡️",
+    layout="wide"
+)
 
-# --- 2. Professional Blue & White UI ---
-st.markdown("""
-<style>
-    .stApp { background-color: #f8fafc; color: #1e3a8a; }
-    .title { font-size: 38px; font-weight: 800; text-align: center; color: #1e3a8a; margin-bottom: 20px; }
-    .metric-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3b82f6; }
-    .report-card { background: white; padding: 25px; border-radius: 15px; border-left: 10px solid #1e3a8a; box-shadow: 0 10px 25px rgba(0,0,0,0.05); color: #334155; }
-    .stTextArea textarea { border-radius: 12px; border: 2px solid #cbd5e1 !important; }
-    [data-testid="stFileUploadDropzone"] { background: white; border: 2px dashed #3b82f6 !important; border-radius: 12px; }
-</style>
-""", unsafe_allow_html=True)
+# ---------------- FILE READER ----------------
 
-# --- 3. Universal File Reader (Supports EVERYTHING) ---
-def read_any_file(file):
+def read_file(file):
+
+    name = file.name.lower()
+
     try:
-        fname = file.name.lower()
-        if fname.endswith('.pdf'):
-            return " ".join([p.extract_text() for p in PdfReader(file).pages])
-        elif fname.endswith('.docx'):
-            return " ".join([p.text for p in Document(file).paragraphs])
-        elif fname.endswith('.pptx'):
-            prs = Presentation(file)
-            text_runs = []
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text_runs.append(shape.text)
-            return " ".join(text_runs)
-        elif fname.endswith(('.csv', '.xlsx')):
-            df = pd.read_csv(file) if fname.endswith('.csv') else pd.read_excel(file)
-            return df.to_string()
-        else:
-            # Code files (.py, .js, .cpp), Text files (.txt, .log, .md)
-            return file.read().decode("utf-8", errors="ignore")
-    except Exception as e:
-        return f"System Error reading file: {str(e)}"
 
-# --- 4. Linguistic Style Metrics ---
+        # PDF
+        if name.endswith(".pdf"):
+            pdf = PdfReader(file)
+            return " ".join(p.extract_text() or "" for p in pdf.pages)
+
+        # DOCX
+        elif name.endswith(".docx"):
+            doc = Document(file)
+            return "\n".join(p.text for p in doc.paragraphs)
+
+        # CSV
+        elif name.endswith(".csv"):
+            df = pd.read_csv(file)
+            return df.to_string()
+
+        # Excel
+        elif name.endswith(".xlsx"):
+            df = pd.read_excel(file)
+            return df.to_string()
+
+        # JSON
+        elif name.endswith(".json"):
+            data = json.load(file)
+            return json.dumps(data, indent=2)
+
+        # XML
+        elif name.endswith(".xml"):
+            tree = ET.parse(file)
+            root = tree.getroot()
+            return ET.tostring(root, encoding="unicode")
+
+        # Code / Text
+        else:
+            return file.read().decode(errors="ignore")
+
+    except Exception as e:
+        return str(e)
+
+
+# ---------------- FILE TYPE DETECTION ----------------
+
+def detect_type(filename):
+
+    ext = filename.split(".")[-1]
+
+    code_ext = ["py","js","cpp","java","c","php","go","ts","html","css"]
+
+    if ext in code_ext:
+        return "code"
+
+    if ext in ["csv","xlsx","json","xml"]:
+        return "data"
+
+    return "document"
+
+
+# ---------------- STYLE ANALYSIS ----------------
+
 def style_metrics(text):
+
     sentences = re.split(r'[.!?]', text)
     words = text.split()
-    sentence_lengths = [len(s.split()) for s in sentences if len(s.split()) > 0]
-    
+
+    sentence_lengths = [len(s.split()) for s in sentences if s]
+
     avg_sentence = np.mean(sentence_lengths) if sentence_lengths else 0
     variance = np.var(sentence_lengths) if sentence_lengths else 0
-    diversity = len(set(words)) / len(words) if words else 0
-    readability = textstat.flesch_reading_ease(text)
-    
-    return {"avg_sentence": avg_sentence, "variance": variance, "diversity": diversity, "readability": readability}
 
-# --- 5. Main UI Flow ---
-st.markdown("<div class='title'>🛡️ AI Sentinel Ultra: Universal Auditor</div>", unsafe_allow_html=True)
+    vocab = len(set(words))
+    total = len(words)
 
-# Step 1: Input Hierarchy
-st.markdown("### ⌨️ Step 1: Paste Content (Optional)")
-manual_input = st.text_area("Paste code, logs, or text", height=200, label_visibility="collapsed")
+    diversity = vocab / total if total else 0
 
-st.markdown("### 📂 Step 2: Or Upload Any File")
-uploaded_file = st.file_uploader("Upload PDF, Word, Excel, PowerPoint, Python, JS, etc.", type=None)
+    readability = textstat.flesch_reading_ease(text) if len(text) > 50 else 0
+
+    return avg_sentence, variance, diversity, readability
+
+
+# ---------------- UI ----------------
+
+st.title("🛡️ Universal AI Content Detector")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    text_input = st.text_area("Paste content")
+
+with col2:
+    file = st.file_uploader("Upload file")
 
 content = ""
-if uploaded_file:
-    content = read_any_file(uploaded_file)
-    st.info(f"✅ Active Source: {uploaded_file.name}")
+filetype = "text"
+
+if file:
+    content = read_file(file)
+    filetype = detect_type(file.name)
 else:
-    content = manual_input
+    content = text_input
 
-st.write("---")
-run_btn = st.button("🚀 EXECUTE FULL UNIVERSAL SCAN", use_container_width=True)
+run = st.button("Analyze")
 
-# --- 6. Analysis Execution ---
-if run_btn and content:
-    with st.spinner("Analyzing cross-platform linguistic patterns..."):
-        try:
-            metrics = style_metrics(content)
-            
-            # AI Engine Deep Analysis
-            prompt = (
-                "Identify if this text is AI or Human. You MUST name the specific engine (e.g. GPT-4, Claude 3, Gemini, Llama 3). "
-                "Format: AI_SCORE: [0-100], ENGINE: [Name], CONFIDENCE: [Score], REPORT: [One Paragraph]"
-                f"\n\nCONTENT:\n{content[:3800]}"
-            )
-            
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1
-            )
-            
-            out = response.choices[0].message.content
-            
-            # Parsing with Fallbacks
-            ai_val = int(re.search(r"AI_SCORE:\s*(\d+)", out).group(1)) if re.search(r"AI_SCORE:\s*(\d+)", out) else 50
-            engine = re.search(r"ENGINE:\s*(.*)", out).group(1) if re.search(r"ENGINE:\s*(.*)", out) else "Undetermined"
-            conf = re.search(r"CONFIDENCE:\s*(.*)", out).group(1) if re.search(r"CONFIDENCE:\s*(.*)", out) else "Medium"
-            report_body = re.search(r"REPORT:\s*(.*)", out, re.S).group(1) if re.search(r"REPORT:\s*(.*)", out, re.S) else out
+# ---------------- ANALYSIS ----------------
 
-            # --- Layout Step 3: Visualization ---
-            
-            st.markdown("### 📊 Step 3: Audit Visualization")
-            v1, v2 = st.columns([1, 1.2])
+if run and content:
 
-            with v1:
-                fig = go.Figure(data=[go.Pie(
-                    labels=['AI Signatures', 'Human Logic'], values=[ai_val, 100-ai_val], hole=.7,
-                    marker_colors=['#1e3a8a', '#60a5fa']
-                )])
-                fig.update_layout(showlegend=True, height=350, legend=dict(orientation="h", x=0.2, y=-0.1))
-                st.plotly_chart(fig, use_container_width=True)
+    avg, var, div, read = style_metrics(content)
 
-            with v2:
-                fig2 = go.Figure()
-                fig2.add_bar(
-                    x=["Variance", "Vocabulary (%)", "Readability"],
-                    y=[metrics["variance"], metrics["diversity"]*100, metrics["readability"]],
-                    marker_color='#3b82f6'
-                )
-                fig2.update_layout(title="Writing Pattern Analysis", height=350)
-                st.plotly_chart(fig2, use_container_width=True)
+    prompt = f"""
+You are an AI forensic investigator.
 
-            # --- Step 4: Final Report ---
-            st.write("---")
-            st.markdown("### 📝 Step 4: Forensic Report")
-            
-            c1, c2, c3 = st.columns(3)
-            with c1: st.markdown(f"<div class='metric-card'><b>Detected Engine</b><br><h3>{engine}</h3></div>", unsafe_allow_html=True)
-            with c2: st.markdown(f"<div class='metric-card'><b>Confidence</b><br><h3>{conf}</h3></div>", unsafe_allow_html=True)
-            with c3: st.markdown(f"<div class='metric-card'><b>Vocabulary</b><br><h3>{round(metrics['diversity']*100, 1)}%</h3></div>", unsafe_allow_html=True)
+Detect if this content is AI generated.
 
-            st.markdown(f"<div class='report-card'>{report_body}</div>", unsafe_allow_html=True)
+Return format:
 
-        except Exception as e:
-            st.error(f"Audit Error: {e}")
-elif run_btn:
-    st.warning("Please provide some data to analyze!")
+AI_PERCENT:
+ENGINE:
+CONFIDENCE:
+REPORT:
 
-st.write("---")
-st.caption("AI Sentinel Ultra v9.0 | Universal Multi-Format Auditor")
+CONTENT:
+{content[:4000]}
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    res = response.choices[0].message.content
+
+    ai = int(re.search(r"AI_PERCENT:\s*(\d+)", res).group(1))
+    human = 100 - ai
+
+    engine = re.search(r"ENGINE:\s*(.*)", res).group(1)
+    conf = re.search(r"CONFIDENCE:\s*(.*)", res).group(1)
+    report = re.search(r"REPORT:\s*(.*)", res, re.S).group(1)
+
+    # ---------------- CHART 1 ----------------
+
+    fig = go.Figure(data=[go.Pie(
+        labels=["AI","Human"],
+        values=[ai,human],
+        hole=.6
+    )])
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ---------------- CHART 2 ----------------
+
+    fig2 = go.Figure()
+
+    fig2.add_bar(
+        x=["Sentence Variance","Vocabulary Diversity","Readability"],
+        y=[var, div*100, read]
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # ---------------- FILE INFO ----------------
+
+    st.subheader("File Information")
+
+    st.write("Type:", filetype)
+    st.write("Characters:", len(content))
+    st.write("Words:", len(content.split()))
+
+    # ---------------- ENGINE ----------------
+
+    st.subheader("Possible AI Engine")
+
+    st.info(engine)
+
+    st.write("Confidence:", conf)
+
+    # ---------------- REPORT ----------------
+
+    st.subheader("Forensic Report")
+
+    st.write(report)
+
+elif run:
+    st.warning("Add content or upload file")
