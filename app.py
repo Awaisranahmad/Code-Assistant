@@ -2,101 +2,91 @@ import streamlit as st
 from groq import Groq
 from PyPDF2 import PdfReader
 from docx import Document
+import pandas as pd
 import plotly.graph_objects as go
 import re
+import io
 
 # --- 1. Connection ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.set_page_config(page_title="AI Sentinel: Final Audit", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="AI Sentinel: Universal Auditor", page_icon="🛡️", layout="centered")
 
-# --- 2. Professional Modern Blue UI ---
+# --- 2. Professional Blue UI ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #1e3a8a; }
-    .stTextArea textarea { border: 2px solid #cbd5e1 !important; border-radius: 12px; }
+    .stTextArea textarea { border: 2px solid #cbd5e1 !important; border-radius: 12px; background: white; }
     [data-testid="stFileUploadDropzone"] { border: 2px dashed #3b82f6 !important; border-radius: 12px; background: white; }
     
     .stButton>button {
-        background: #1e3a8a !important;
-        color: white !important;
-        font-weight: bold;
-        border-radius: 10px;
-        height: 3.5em;
-        width: 100%;
+        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%) !important;
+        color: white !important; font-weight: bold; border-radius: 10px; height: 3.5em; width: 100%; border: none;
     }
-
     .report-card {
-        background: #ffffff;
-        padding: 25px;
-        border-radius: 15px;
-        border-left: 8px solid #1e3a8a;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        color: #334155;
-        line-height: 1.6;
+        background: #ffffff; padding: 25px; border-radius: 15px; border-left: 8px solid #1e3a8a;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: #334155; line-height: 1.6;
     }
-
     .status-msg {
-        padding: 10px;
-        border-radius: 8px;
-        background-color: #dbeafe;
-        color: #1e40af;
-        margin-bottom: 15px;
-        font-weight: bold;
-        text-align: center;
+        padding: 12px; border-radius: 8px; background-color: #dbeafe; color: #1e40af;
+        margin-bottom: 15px; font-weight: bold; text-align: center; border: 1px solid #bfdbfe;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. Robust File Reader ---
-def read_file(file):
+# --- 3. Universal File Reader (Handles All Types) ---
+def read_any_file(file):
     try:
-        if file.type == "application/pdf":
+        fname = file.name.lower()
+        if fname.endswith('.pdf'):
             return " ".join([p.extract_text() for p in PdfReader(file).pages])
-        elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        elif fname.endswith('.docx'):
             return " ".join([p.text for p in Document(file).paragraphs])
+        elif fname.endswith(('.csv', '.xlsx')):
+            df = pd.read_csv(file) if fname.endswith('.csv') else pd.read_excel(file)
+            return df.to_string()
         else:
-            # Code files ya text files ke liye
-            content = file.read()
-            return content.decode("utf-8")
+            # Code, Text, Log, etc.
+            return file.read().decode("utf-8", errors="ignore")
     except Exception as e:
-        return f"File Error: {str(e)}"
+        return f"File System Error: {str(e)}"
 
-# --- 4. Main UI Layout ---
-st.markdown("<h1 style='text-align:center;'>🛡️ AI Sentinel Auditor</h1>", unsafe_allow_html=True)
+# --- 4. Main UI ---
+st.markdown("<h1 style='text-align:center;'>🛡️ Universal AI Auditor</h1>", unsafe_allow_html=True)
 st.write("---")
 
-# Section 1: Paste Code
-st.markdown("### ⌨️ Step 1: Paste Content")
-manual_input = st.text_area("Paste text or code here", height=200, label_visibility="collapsed")
+# STEP 1: Paste Code
+st.markdown("### ⌨️ Step 1: Paste Your Content")
+manual_input = st.text_area("Paste text, code or logs here", height=200, label_visibility="collapsed")
 
-# Section 2: File Upload
-st.markdown("### 📂 Step 2: Upload Document")
-uploaded_file = st.file_uploader("Upload PDF, DOCX, PY, JS, TXT", type=["pdf", "docx", "txt", "py", "js"])
+# STEP 2: File Upload (All types)
+st.markdown("### 📂 Step 2: Or Upload Any File")
+uploaded_file = st.file_uploader("Upload PDF, DOCX, XLSX, CSV, PY, JS, TXT...", type=None) # type=None allows all
 
-# Content Selection Logic
 final_content = ""
 if uploaded_file:
-    final_content = read_file(uploaded_file)
-    st.markdown(f"<div class='status-msg'>✅ File Detected: {uploaded_file.name}</div>", unsafe_allow_html=True)
+    final_content = read_any_file(uploaded_file)
+    st.markdown(f"<div class='status-msg'>✅ Successfully Read: {uploaded_file.name}</div>", unsafe_allow_html=True)
 else:
     final_content = manual_input
     if manual_input:
         st.markdown("<div class='status-msg'>📝 Using Pasted Content</div>", unsafe_allow_html=True)
 
 st.write("---")
-analyze_btn = st.button("🚀 RUN FORENSIC AUDIT")
+analyze_btn = st.button("🚀 EXECUTE MULTI-SOURCE AUDIT")
 
-# Section 3 & 4: Results
+# STEP 3 & 4: Analysis
 if analyze_btn and final_content:
-    with st.spinner("AI is analyzing fingerprints..."):
+    with st.spinner("Analyzing cross-platform AI signatures..."):
         try:
-            # Strict Prompting but Flexible Parsing
+            # Better Prompting for Accuracy and Multiple Sources
             prompt = (
-                "Audit this text for AI content. You MUST include these markers in your response: "
-                "AI_SCORE: [0-100], HUMAN_SCORE: [0-100], SOURCE: [Name]. "
-                "Then provide a professional paragraph starting with the word 'REPORT:' "
-                f"\n\nCONTENT:\n{final_content[:3500]}"
+                "Perform a forensic audit on the provided content. Be realistic. "
+                "If it's a mix, state it. Return EXACTLY in this format:\n"
+                "AI_SCORE: [0-100]\nHUMAN_SCORE: [0-100]\nSOURCES: [List likely sources like ChatGPT, Human, Gemini, etc.]\n"
+                "CONFIDENCE: [Low/Medium/High]\n"
+                "REPORT: [A professional technical paragraph explaining markers like burstiness and perplexity.]"
+                f"\n\nCONTENT:\n{final_content[:3800]}"
             )
             
             response = client.chat.completions.create(
@@ -106,45 +96,37 @@ if analyze_btn and final_content:
             
             raw_res = response.choices[0].message.content
 
-            # --- SMART EXTRACTION (Regex) ---
-            ai_score = 50 # Default
-            ai_match = re.search(r"AI_SCORE:\s*(\d+)", raw_res)
-            if ai_match: ai_score = int(ai_match.group(1))
-            
+            # Extraction Logic
+            ai_score = int(re.search(r"AI_SCORE:\s*(\d+)", raw_res).group(1)) if re.search(r"AI_SCORE:\s*(\d+)", raw_res) else 50
             hu_score = 100 - ai_score
+            sources = re.search(r"SOURCES:\s*(.*)", raw_res).group(1).split('\n')[0] if re.search(r"SOURCES:\s*(.*)", raw_res) else "Unknown"
+            confidence = re.search(r"CONFIDENCE:\s*(\w+)", raw_res).group(1) if re.search(r"CONFIDENCE:\s*(\w+)", raw_res) else "N/A"
             
-            source_match = re.search(r"SOURCE:\s*(.*)", raw_res)
-            source_name = source_match.group(1).split('\n')[0] if source_match else "Unknown"
-
-            # Report nikalne ka naya tareeka (Ab khali nahi rahega)
             report_match = re.search(r"REPORT:\s*(.*)", raw_res, re.DOTALL)
-            if report_match:
-                report_body = report_match.group(1).strip()
-            else:
-                # Agar AI 'REPORT:' likhna bhool jaye to sara text le lo jo scores ke baad hai
-                report_body = raw_res.split("SOURCE:")[-1].split("\n", 1)[-1].strip()
+            report_body = report_match.group(1).strip() if report_match else raw_res.split("SOURCES:")[-1].split("\n", 2)[-1].strip()
 
-            # --- Visualization (Circle Chart) ---
+            # --- Visualization (Donut Chart) ---
             st.markdown("### 📊 Step 3: Audit Visualization")
             fig = go.Figure(data=[go.Pie(
-                labels=['AI Detection', 'Human Logic'], 
+                labels=['AI Signatures', 'Human Logic'], 
                 values=[ai_score, hu_score], 
                 hole=.7,
-                marker_colors=['#1e3a8a', '#60a5fa'], # Dark Blue & Sky Blue
+                marker_colors=['#1e3a8a', '#60a5fa'],
                 textinfo='percent'
             )])
             fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=300, paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- Final Report ---
-            st.markdown(f"**Potential Source:** `{source_name}`")
+            # --- Forensic Report ---
+            st.markdown(f"**Potential Sources:** `{sources}`")
+            st.markdown(f"**Audit Confidence:** `{confidence}`")
             st.markdown("### 📝 Step 4: Forensic Audit Report")
             st.markdown(f"<div class='report-card'>{report_body}</div>", unsafe_allow_html=True)
 
         except Exception as e:
-            st.error(f"Audit Error: {e}")
+            st.error(f"Audit System Failure: {e}")
 elif analyze_btn:
-    st.warning("Please provide input data!")
+    st.warning("No data found to audit!")
 
 st.write("---")
-st.caption("AI Sentinel v6.5 | Blue Edition | Fix: Report Extraction")
+st.caption("AI Sentinel v7.0 | Universal Multi-Source Auditor | Blue Edition")
