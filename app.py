@@ -6,105 +6,121 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import re
+import textstat
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.set_page_config(
-    page_title="AI Sentinel Pro",
-    page_icon="🛡️",
-    layout="centered"
-)
+st.set_page_config(page_title="AI Sentinel Ultra", page_icon="🛡️", layout="wide")
 
-# ---------- STYLE ----------
+# ---------------- UI STYLE ----------------
 st.markdown("""
 <style>
 
 .stApp{
-background:#f1f5f9;
+background:#f8fafc;
 }
 
-.big-title{
-text-align:center;
-font-size:34px;
+.title{
+font-size:36px;
 font-weight:700;
+text-align:center;
 color:#1e3a8a;
 }
 
-.report{
+.card{
 background:white;
-padding:25px;
+padding:20px;
 border-radius:14px;
-border-left:6px solid #2563eb;
-box-shadow:0 10px 25px rgba(0,0,0,0.05);
+box-shadow:0 10px 20px rgba(0,0,0,0.05);
+margin-bottom:20px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- FILE READER ----------
+# ---------------- FILE READER ----------------
 def read_file(file):
 
     name = file.name.lower()
 
-    try:
-        if name.endswith("pdf"):
-            pdf = PdfReader(file)
-            text = ""
-            for p in pdf.pages:
-                text += p.extract_text()
-            return text
+    if name.endswith("pdf"):
+        pdf = PdfReader(file)
+        text = ""
+        for p in pdf.pages:
+            text += p.extract_text()
+        return text
 
-        elif name.endswith("docx"):
-            doc = Document(file)
-            return "\n".join(p.text for p in doc.paragraphs)
+    if name.endswith("docx"):
+        doc = Document(file)
+        return "\n".join(p.text for p in doc.paragraphs)
 
-        elif name.endswith("csv"):
-            df = pd.read_csv(file)
-            return df.to_string()
+    if name.endswith("csv"):
+        df = pd.read_csv(file)
+        return df.to_string()
 
-        elif name.endswith("xlsx"):
-            df = pd.read_excel(file)
-            return df.to_string()
+    if name.endswith("xlsx"):
+        df = pd.read_excel(file)
+        return df.to_string()
 
-        else:
-            return file.read().decode()
-
-    except:
-        return "Error reading file"
+    return file.read().decode()
 
 
-# ---------- BASIC STYLERY ----------
-def analyze_style(text):
+# ---------------- STYLE ANALYSIS ----------------
+def style_metrics(text):
 
     sentences = re.split(r'[.!?]', text)
     words = text.split()
 
-    avg_sentence = np.mean([len(s.split()) for s in sentences if s.strip() != ""])
-    variance = np.var([len(s.split()) for s in sentences if s.strip() != ""])
+    sentence_lengths = [len(s.split()) for s in sentences if s]
+
+    avg_sentence = np.mean(sentence_lengths)
+    variance = np.var(sentence_lengths)
 
     vocab = len(set(words))
     total = len(words)
 
     diversity = vocab / total if total else 0
 
-    repetition = 1 - diversity
+    readability = textstat.flesch_reading_ease(text)
 
     return {
         "avg_sentence": avg_sentence,
         "variance": variance,
         "diversity": diversity,
-        "repetition": repetition
+        "readability": readability
     }
 
 
-# ---------- UI ----------
-st.markdown("<div class='big-title'>🛡️ AI Sentinel Pro Detector</div>", unsafe_allow_html=True)
+# ---------------- SENTENCE SCAN ----------------
+def sentence_scan(text):
 
-st.write("")
+    sentences = re.split(r'[.!?]', text)
 
-text_input = st.text_area("Paste text or code", height=220)
+    scores = []
 
-file = st.file_uploader("or upload document")
+    for s in sentences:
+        length = len(s.split())
+
+        if length > 25:
+            scores.append(0.8)
+        elif length > 15:
+            scores.append(0.6)
+        else:
+            scores.append(0.3)
+
+    return sentences, scores
+
+
+# ---------------- HEADER ----------------
+st.markdown("<div class='title'>🛡️ AI Sentinel Ultra</div>", unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    text_input = st.text_area("Paste text or code", height=250)
+
+with col2:
+    file = st.file_uploader("Upload document")
 
 content = ""
 
@@ -113,28 +129,28 @@ if file:
 else:
     content = text_input
 
-analyze = st.button("Run Deep Forensic Scan")
+run = st.button("Run Full Forensic Scan")
 
+# ---------------- MAIN ANALYSIS ----------------
+if run and content:
 
-# ---------- ANALYSIS ----------
-if analyze and content:
+    with st.spinner("Analyzing linguistic signals..."):
 
-    with st.spinner("Running forensic analysis..."):
+        metrics = style_metrics(content)
 
-        style = analyze_style(content)
+        sentences, scores = sentence_scan(content)
 
         prompt = f"""
-You are an AI forensic investigator.
+You are an AI forensic expert.
 
-Determine probability text is AI generated.
+Estimate probability text is AI generated.
 
-Return EXACT format:
+Return format:
 
-AI_PERCENT: number
-HUMAN_PERCENT: number
-ENGINE_GUESS: model name
-CONFIDENCE: High Medium or Low
-REPORT: explanation
+AI_PERCENT:
+ENGINE:
+CONFIDENCE:
+REPORT:
 
 TEXT:
 {content[:3500]}
@@ -146,53 +162,82 @@ TEXT:
             temperature=0
         )
 
-        res = response.choices[0].message.content
+        out = response.choices[0].message.content
 
-        ai = int(re.search(r"AI_PERCENT:\s*(\d+)", res).group(1))
+        ai = int(re.search(r"AI_PERCENT:\s*(\d+)", out).group(1))
         human = 100 - ai
 
-        engine = re.search(r"ENGINE_GUESS:\s*(.*)", res).group(1)
-        conf = re.search(r"CONFIDENCE:\s*(.*)", res).group(1)
+        engine = re.search(r"ENGINE:\s*(.*)", out).group(1)
+        conf = re.search(r"CONFIDENCE:\s*(.*)", out).group(1)
+        report = re.search(r"REPORT:\s*(.*)", out, re.S).group(1)
 
-        report = re.search(r"REPORT:\s*(.*)", res, re.S).group(1)
+        # -------- CHART 1 --------
 
-        # -------- DONUT CHART --------
+        st.subheader("AI Probability")
 
         fig = go.Figure(data=[go.Pie(
-            labels=["AI Probability", "Human Probability"],
+            labels=["AI", "Human"],
             values=[ai, human],
             hole=.65
         )])
 
-        fig.update_layout(height=320)
-
         st.plotly_chart(fig, use_container_width=True)
 
-        # -------- BAR CHART --------
+        # -------- CHART 2 --------
+
+        st.subheader("Writing Pattern Analysis")
 
         fig2 = go.Figure()
 
         fig2.add_bar(
-            x=["Sentence Variance", "Vocabulary Diversity", "Repetition"],
+            x=["Sentence Variance", "Vocabulary Diversity", "Readability"],
             y=[
-                style["variance"],
-                style["diversity"] * 100,
-                style["repetition"] * 100
+                metrics["variance"],
+                metrics["diversity"] * 100,
+                metrics["readability"]
             ]
         )
 
         st.plotly_chart(fig2, use_container_width=True)
 
-        # -------- RESULTS --------
+        # -------- SENTENCE LEVEL --------
 
-        st.write("### Engine Guess")
+        st.subheader("Suspicious Sentences")
+
+        data = {
+            "Sentence": sentences[:20],
+            "AI Suspicion": scores[:20]
+        }
+
+        df = pd.DataFrame(data)
+
+        st.dataframe(df)
+
+        # -------- WORD STATS --------
+
+        words = content.split()
+
+        st.subheader("Text Statistics")
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric("Words", len(words))
+        c2.metric("Unique Words", len(set(words)))
+        c3.metric("Avg Sentence", round(metrics["avg_sentence"], 2))
+
+        # -------- ENGINE --------
+
+        st.subheader("Model Guess")
+
         st.info(engine)
 
         st.write("Confidence:", conf)
 
-        st.write("### Forensic Report")
+        # -------- REPORT --------
 
-        st.markdown(f"<div class='report'>{report}</div>", unsafe_allow_html=True)
+        st.subheader("Forensic Report")
 
-elif analyze:
-    st.warning("Provide content first")
+        st.markdown(f"<div class='card'>{report}</div>", unsafe_allow_html=True)
+
+elif run:
+    st.warning("Provide text or upload file")
