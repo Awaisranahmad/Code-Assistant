@@ -2,8 +2,9 @@ streamlit
 groq
 PyPDF2
 python-docx
+python-pptx
 pandas
+openpyxl
 plotly
 numpy
 textstat
-openpyxl
