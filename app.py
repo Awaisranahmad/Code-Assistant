@@ -4,123 +4,150 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 
-# --- 1. Setup ---
+# --- 1. Connection & Page Setup ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.set_page_config(page_title="AI Sentinel Pro", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="AI Sentinel: Forensic Auditor", page_icon="🛡️", layout="wide")
 
-# --- 2. Advanced UI Styling (Modern Dark Dashboard) ---
+# --- 2. Ultra-Modern UI Styling (Advanced CSS) ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background-color: #0b0e14; color: #e1e4e8; }
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
     
-    /* Input Box styling */
+    .stApp { background-color: #050a0f; color: #00ff41; font-family: 'Space Mono', monospace; }
+    
+    /* Input Area Styling */
     .stTextArea textarea { 
-        background-color: #161b22 !important; 
-        color: #58a6ff !important; 
-        border: 1px solid #30363d !important;
-        border-radius: 12px;
+        background-color: #0d1117 !important; 
+        color: #00ff41 !important; 
+        border: 1px solid #00ff41 !important;
+        border-radius: 4px;
+        box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
     }
     
-    /* Report Card */
-    .report-box {
-        background: #1c2128;
-        padding: 25px;
-        border-radius: 15px;
-        border-left: 5px solid #238636;
-        margin-top: 20px;
-        line-height: 1.6;
-        color: #adbac7;
+    /* Neon Metric Cards */
+    .metric-container {
+        display: flex;
+        justify-content: space-around;
+        gap: 20px;
+        margin-bottom: 25px;
     }
-    
-    .metric-card {
-        background: #22272e;
-        padding: 15px;
+    .neon-card {
+        flex: 1;
+        padding: 20px;
         border-radius: 10px;
         text-align: center;
-        border: 1px solid #444c56;
+        border: 2px solid #00ff41;
+        background: rgba(0, 255, 65, 0.05);
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
     }
+    .neon-card h2 { font-size: 45px; margin: 10px 0; color: #fff; }
+    
+    /* Report & Source Box */
+    .report-box {
+        background: #111;
+        padding: 25px;
+        border-radius: 8px;
+        border-left: 10px solid #00ff41;
+        color: #ddd;
+        font-size: 15px;
+        line-height: 1.8;
+    }
+    .source-tag {
+        display: inline-block;
+        padding: 5px 15px;
+        background: #00ff41;
+        color: #000;
+        font-weight: bold;
+        border-radius: 20px;
+        margin-bottom: 10px;
+    }
+    
+    /* Sidebar Fix */
+    [data-testid="stSidebar"] { background-color: #0a0f14 !important; border-right: 1px solid #00ff41; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. Helper Functions ---
-def extract_text(file):
+# --- 3. Core Logic Functions ---
+def get_content(file):
     try:
         if file.type == "application/pdf":
             return " ".join([p.extract_text() for p in PdfReader(file).pages])
         elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             return " ".join([p.text for p in Document(file).paragraphs])
         return file.getvalue().decode("utf-8")
-    except: return ""
+    except: return "Error: Unsupported File."
 
-# --- 4. Main UI ---
-st.markdown("<h1 style='text-align: center; color: #2ea043;'>🛡️ AI Sentinel Auditor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Detect AI Patterns in Text & Code</p>", unsafe_allow_html=True)
+# --- 4. Sidebar Panel ---
+with st.sidebar:
+    st.markdown("<h2 style='color:#00ff41;'>🛡️ AUDIT CONTROL</h2>", unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Drop Files (PDF/DOCX/TXT):", type=["pdf", "docx", "txt", "py", "js"])
+    precision = st.select_slider("Detection Depth:", options=["Fast", "Balanced", "Forensic"])
+    st.markdown("---")
+    if st.button("RESET SYSTEM"): st.rerun()
 
-col1, col2 = st.columns([1, 1], gap="large")
+st.markdown("<h1 style='text-align:center; color:#00ff41; text-shadow: 0 0 20px #00ff41;'>SYSTEM AUDIT: AI CONTENT DETECTOR</h1>", unsafe_allow_html=True)
 
-with col1:
-    st.subheader("📥 Input Content")
-    uploaded_file = st.file_uploader("Upload Document (PDF, DOCX, TXT):", type=["pdf", "docx", "txt", "py", "js"])
-    manual_text = st.text_area("Or Paste Content Here:", height=350, placeholder="Paste text or code...")
-    
-    audit_btn = st.button("🚀 START SCANNING", use_container_width=True)
+# --- 5. Workspace ---
+col_in, col_out = st.columns([1, 1], gap="large")
 
-with col2:
-    st.subheader("📊 Analysis Results")
-    
-    input_data = extract_text(uploaded_file) if uploaded_file else manual_text
+with col_in:
+    st.markdown("### 📥 DATA INPUT")
+    raw_text = st.text_area("Input Console:", height=450, placeholder="SYSTEM WAITING FOR DATA...")
+    final_data = get_content(uploaded_file) if uploaded_file else raw_text
+    start_audit = st.button("EXECUTE FORENSIC SCAN", use_container_width=True)
 
-    if audit_btn and input_data:
-        with st.spinner("Analyzing linguistic structures..."):
+with col_out:
+    st.markdown("### 📊 AUDIT METRICS")
+    if start_audit and final_data:
+        with st.spinner("SCANNING LINGUISTIC FINGERPRINTS..."):
             try:
-                # Prompt for specific metrics
-                prompt = (
-                    "Analyze this content. Provide a JSON-like short summary first: "
-                    "AI_PERCENT: [0-100], HUMAN_PERCENT: [0-100]. "
-                    "Then provide a single professional paragraph auditing the content's origin, "
-                    "logic, and authenticity. No Urdu. Pure Technical English."
+                # Advanced Prompt for Scores + Source + Report
+                audit_prompt = (
+                    "Audit this text for AI content. Return data in this STRICT format:\n"
+                    "AI_PERCENT: [Value]\nHUMAN_PERCENT: [Value]\nLIKELY_SOURCE: [ChatGPT/Claude/Gemini/Human]\n"
+                    "REPORT: [One professional paragraph describing technical markers, perplexity, and burstiness.]"
                 )
                 
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[{"role": "system", "content": "You are a forensic content analyst."},
-                              {"role": "user", "content": f"{prompt}\n\nContent:\n{input_data[:3000]}"}]
+                    messages=[{"role": "system", "content": "You are a forensic AI detector specializing in linguistic variance."},
+                              {"role": "user", "content": f"{audit_prompt}\n\nCONTENT:\n{final_data[:4000]}"}]
                 )
                 
-                res_text = response.choices[0].message.content
+                raw_res = response.choices[0].message.content
                 
-                # Simple logic to extract percentages for the graph
-                # (Assuming AI returns something like AI_PERCENT: 70)
-                ai_val = 50 # Default
-                match = re.search(r"AI_PERCENT:\s*(\d+)", res_text)
-                if match: ai_val = int(match.group(1))
-                hu_val = 100 - ai_val
+                # Parsing results using Regex
+                ai_p = int(re.search(r"AI_PERCENT:\s*(\d+)", raw_res).group(1)) if re.search(r"AI_PERCENT:\s*(\d+)", raw_res) else 50
+                hu_p = 100 - ai_p
+                source = re.search(r"LIKELY_SOURCE:\s*(\w+)", raw_res).group(1) if re.search(r"LIKELY_SOURCE:\s*(\w+)", raw_res) else "Unknown"
+                report = re.search(r"REPORT:\s*(.*)", raw_res, re.DOTALL).group(1) if re.search(r"REPORT:\s*(.*)", raw_res, re.DOTALL) else "No report generated."
 
-                # --- Visual Graphs ---
-                m1, m2 = st.columns(2)
-                with m1:
-                    st.markdown(f"<div class='metric-card'><b>🤖 AI Probability</b><br><h2 style='color:#f85149;'>{ai_val}%</h2></div>", unsafe_allow_html=True)
-                with m2:
-                    st.markdown(f"<div class='metric-card'><b>🧑 Human Probability</b><br><h2 style='color:#2ea043;'>{hu_val}%</h2></div>", unsafe_allow_html=True)
+                # --- Visual Graphs (Neon Cards) ---
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div class="neon-card">
+                        <p style="color:#00ff41;">🤖 AI SCORE</p>
+                        <h2>{ai_p}%</h2>
+                    </div>
+                    <div class="neon-card">
+                        <p style="color:#fff;">🧑 HUMAN SCORE</p>
+                        <h2>{hu_p}%</h2>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                st.write("---")
-                st.write("**Detection Confidence:**")
-                st.progress(ai_val / 100)
+                st.write("**Analysis Confidence Level:**")
+                st.progress(ai_p / 100)
                 
-                # --- Final Report ---
-                st.markdown("### 📝 Forensic Audit Report")
-                # Cleaning the text for display
-                clean_report = re.sub(r"AI_PERCENT:.*HUMAN_PERCENT:.*", "", res_text, flags=re.DOTALL).strip()
-                st.markdown(f"<div class='report-box'>{clean_report}</div>", unsafe_allow_html=True)
+                # --- Source & Forensic Report ---
+                st.markdown(f"<span class='source-tag'>IDENTIFIED SOURCE: {source}</span>", unsafe_allow_html=True)
+                st.markdown(f"<div class='report-box'>{report}</div>", unsafe_allow_html=True)
 
             except Exception as e:
-                st.error(f"Scan interrupted: {e}")
+                st.error(f"SYSTEM FAILURE: {str(e)}")
     else:
-        st.info("System ready. Please provide input to start the audit.")
+        st.info("Awaiting input for forensic analysis...")
 
-# --- 5. Footer ---
 st.write("---")
-st.caption("AI Sentinel v2.5 | Enterprise Grade Content Forensics")
+st.caption("AI Sentinel v3.0 | Matrix Forensic Engine | Groq Powered")
