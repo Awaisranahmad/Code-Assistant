@@ -1,4 +1,4 @@
-vimport streamlit as st
+import streamlit as st
 from groq import Groq
 from PyPDF2 import PdfReader
 from docx import Document
